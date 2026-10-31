@@ -192,19 +192,33 @@ async def click_optional(page, selectors, timeout_ms=1500):
         except Exception:
             continue
 
-
 async def wait_visible(page, selectors, timeout_ms):
-    last_error = None
-    per_selector_timeout = max(1500, min(timeout_ms, 10000))
-    for selector in selectors:
-        locator = page.locator(selector).first
-        try:
-            await locator.wait_for(state="visible", timeout=per_selector_timeout)
-            return locator
-        except Exception as exc:
-            last_error = exc
-            continue
-    raise TimeoutError(f"No visible selector found: {selectors}") from last_error
+    import asyncio
+    import time
+
+    deadline = time.monotonic() + timeout_ms / 1000
+
+    while time.monotonic() < deadline:
+        for selector in selectors:
+            locator = page.locator(selector)
+
+            try:
+                count = await locator.count()
+
+                for i in range(count):
+                    element = locator.nth(i)
+
+                    if await element.is_visible():
+                        return element
+
+            except Exception:
+                continue
+
+        await asyncio.sleep(0.3)
+
+    raise TimeoutError(
+        f"No visible selector found: {selectors}"
+    )
 
 
 async def save_debug_artifacts(page, process_id, stage):
