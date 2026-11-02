@@ -221,6 +221,28 @@ async def wait_visible(page, selectors, timeout_ms):
     )
 
 
+async def fill_credentials(page, email_value, password_value, timeout_ms):
+    """Gigya re-renders its login form and can wipe values right after fill."""
+    deadline = time.monotonic() + timeout_ms / 1000
+
+    while time.monotonic() < deadline:
+        email_input = await wait_visible(page, EMAIL_SELECTORS, 2000)
+        password_input = await wait_visible(page, PASSWORD_SELECTORS, 2000)
+
+        await email_input.fill(email_value)
+        await password_input.fill(password_value)
+
+        if (
+            await email_input.input_value() == email_value
+            and await password_input.input_value() == password_value
+        ):
+            return email_input, password_input
+
+        await asyncio.sleep(0.5)
+
+    raise TimeoutError("Login fields keep being cleared")
+
+
 async def save_debug_artifacts(page, process_id, stage):
     safe_stage = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in stage)
     try:
@@ -340,12 +362,9 @@ async def fetch(request: Request):
             await click_optional(page, COOKIE_BUTTON_SELECTORS)
 
             log_process("Waiting for login form...", process_id)
-            email_input = await wait_visible(page, EMAIL_SELECTORS, timeout_input)
-            password_input = await wait_visible(page, PASSWORD_SELECTORS, timeout_input)
+            email_input, password_input = await fill_credentials(page, email, password, timeout_input)
 
-            log_process("Filling credentials...", process_id)
-            await email_input.fill(email)
-            await password_input.fill(password)
+            log_process("Credentials filled", process_id)
 
             log_process("Submitting login form...", process_id)
             login_button = await wait_visible(page, LOGIN_BUTTON_SELECTORS, timeout_input)
